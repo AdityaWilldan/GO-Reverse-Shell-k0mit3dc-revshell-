@@ -10,7 +10,11 @@ Project Windows RAT ini berbasis Go ini dikembangkan oleh Komunitas K0m1t3dc(ctf
 Kode ini belum sepenuhnya powerfull dan masih menggunakan reverse shell plaintext, implementasi evasion yang basic, hardcoded C2 via ngrok, dan berbagai incomplete features yang sengaja dibiarkan untuk pengembangan lebih lanjut.
 ## Screenshots
 
-![App Screenshot](https://drive.google.com/file/d/1mSnt_armLlpA0BZSct9WClTQJtoFucoV)
+![App Screenshot](https://drive.google.com/uc?export=view&id/1mSnt_armLlpA0BZSct9WClTQJtoFucoV)
+
+## With Linux
+
+![App Screenshot](https://drive.google.com/uc?export=view&id=1f-sNGYOHDzhcUgTdhLnFNo6WhnObBVz4)
 
 ## Documentation
 
