@@ -12,10 +12,6 @@ Kode ini belum sepenuhnya powerfull dan masih menggunakan reverse shell plaintex
 
 ![App Screenshot](https://drive.google.com/file/d/1mSnt_armLlpA0BZSct9WClTQJtoFucoV)
 
-## With Linux
-
-![App Screenshot](https://drive.google.com/uc?export=view&id=1f-sNGYOHDzhcUgTdhLnFNo6WhnObBVz4)
-
 ## Documentation
 
 [Documentation](https://github.com/AdityaWilldan/GO-Reverse-Shell-k0mit3dc-revshell-/blob/main/README.md)
