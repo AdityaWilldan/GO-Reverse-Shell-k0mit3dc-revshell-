@@ -12,8 +12,14 @@ Kode ini belum sepenuhnya powerfull dan masih menggunakan reverse shell plaintex
 
 ## Documentation
 
-[Documentation](https://linktodocumentation)
+[Documentation](https://github.com/AdityaWilldan/GO-Reverse-Shell-k0mit3dc-revshell-/blob/main/README.md)
 
+clone repo ini
+
+```bash
+  git clone https://github.com/AdityaWilldan/GO-Reverse-Shell-k0mit3dc-revshell-.git
+  cd /GO-Reverse-Shell-k0mit3dc-revshell
+```
 
 ## Installation
 
@@ -38,10 +44,7 @@ go get golang.org/x/sys/windows/registry
 
 ```
 
-clone repo ini
+## Screenshots
 
-```bash
-  git clone https://github.com/AdityaWilldan/GO-Reverse-Shell-k0mit3dc-revshell-.git
-  cd /GO-Reverse-Shell-k0mit3dc-revshell
-```
-    
+![App Screenshot](https://drive.google.com/uc?export=view&id=1f-sNGYOHDzhcUgTdhLnFNo6WhnObBVz4)
+
